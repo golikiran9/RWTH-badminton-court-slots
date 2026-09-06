@@ -28,10 +28,18 @@ def main():
         return
         
     soup = BeautifulSoup(response.text, 'html.parser')
-    found_slots = False
+    available_courts = []
     
-    # Search through all booking tables on the page
-    for table in soup.find_all('table'):
+    # Iterate through all table forms/sections on the page
+    for bs_form in soup.find_all('form', class_='bs_form_angebot'):
+        # Extract the court name heading (e.g., "EINZELTERMINBUCHUNG Badmintoncourt 1")
+        heading = bs_form.find(['h2', 'h3', 'div', 'span'], class_='bs_head')
+        court_name = heading.text.strip() if heading else "Badmintoncourt"
+        
+        table = bs_form.find('table')
+        if not table:
+            continue
+            
         first_row = table.find('tr')
         if not first_row:
             continue
@@ -50,21 +58,26 @@ def main():
                 
                 time_text = cells[0].text.strip()
                 
-                # Look specifically for the 18:00 time block
+                # Check for the 18:00 time block
                 if '18:00' in time_text and len(cells) > wed_idx:
                     wed_status = cells[wed_idx].text.strip()
                     
-                    # "keine Buchung" means the slot is unavailable or closed. 
-                    # If the text is anything else (like a date or "Buchen"), a slot is open!
+                    # If status is not "keine Buchung" or empty, the slot is available
                     if 'keine Buchung' not in wed_status and wed_status != '':
-                        found_slots = True
+                        available_courts.append(f"• {court_name} ({wed_status})")
 
-    if found_slots:
-        message = f"🏸 *Badminton Court Alert!*\n\nA slot for **Wednesday at 18:00** is currently open!\n\nBook it immediately here:\n{URL}"
+    if available_courts:
+        courts_list = "\n".join(available_courts)
+        message = (
+            f"🏸 *Badminton Court Alert!*\n\n"
+            f"Slots available for **Wednesday at 18:00**:\n"
+            f"{courts_list}\n\n"
+            f"Book immediately here:\n{URL}"
+        )
         send_telegram_message(message)
-        print("Slot found, Telegram notification sent!")
+        print("Slots found! Telegram notification sent.")
     else:
-        print("No slots available for Wednesday at 18:00 right now.")
+        print("No slots available for Wednesday at 18:00 right now across any court.")
 
 if __name__ == "__main__":
     main()
