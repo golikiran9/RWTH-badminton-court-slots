@@ -59,7 +59,7 @@ def main():
                 time_text = cells[0].text.strip()
                 
                 # Check for the 18:00 time block
-                if '18:00' in time_text and len(cells) > wed_idx:
+                if '11:00' in time_text and len(cells) > wed_idx:
                     wed_status = cells[wed_idx].text.strip()
                     
                     # If status is not "keine Buchung" or empty, the slot is available
