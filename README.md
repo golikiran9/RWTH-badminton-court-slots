@@ -1,0 +1,1 @@
+# RWTH-badminton-court-slots
