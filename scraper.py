@@ -1,4 +1,5 @@
 import os
+import re
 import requests
 from bs4 import BeautifulSoup
 
@@ -7,10 +8,10 @@ from bs4 import BeautifulSoup
 # ==========================================
 CONFIG = {
     # Simple day name: 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'
-    'TARGET_WEEKDAY': 'Montag',
+    'TARGET_WEEKDAY': 'Mittwoch',
     
     # Target time slot format (e.g., '18:00', '19:30', '07:30')
-    'TARGET_TIME': '07:30',
+    'TARGET_TIME': '18:00',
     
     # Set to True if you want a heartbeat ping every time GitHub Actions runs
     'DEBUG_NOTIFY': False 
@@ -28,6 +29,19 @@ def send_telegram_message(message):
         "parse_mode": "Markdown"
     }
     requests.post(url, data=payload)
+
+def get_clean_court_name(table_elem, index):
+    """Extracts exact court name (e.g. 'Badmintoncourt 1') avoiding duplicated generic titles."""
+    # Look backwards for the nearest preceding element containing court details
+    prev_node = table_elem.find_previous(['h2', 'h3', 'div', 'b'])
+    while prev_node:
+        text = prev_node.text.strip()
+        match = re.search(r'Badmintoncourt\s*\d+.*', text, re.IGNORECASE)
+        if match:
+            return match.group(0)
+        prev_node = prev_node.find_previous(['h2', 'h3', 'div', 'b'])
+        
+    return f"Badmintoncourt {index}"
 
 def main():
     target_day = CONFIG['TARGET_WEEKDAY'].strip().lower()
@@ -48,28 +62,26 @@ def main():
         return
         
     soup = BeautifulSoup(response.text, 'html.parser')
-    available_courts = []
+    available_now = []
+    opening_soon = []
     
-    # Iterate through all booking tables
-    for table in soup.find_all('table'):
+    tables = soup.find_all('table')
+    for idx, table in enumerate(tables, start=1):
         first_row = table.find('tr')
         if not first_row:
             continue
             
         columns = [col.text.strip().lower() for col in first_row.find_all(['th', 'td'])]
         
-        # Locate the column matching the target weekday
+        # Locate target weekday column
         day_idx = -1
-        for idx, col in enumerate(columns):
+        for col_i, col in enumerate(columns):
             if target_day in col:
-                day_idx = idx
+                day_idx = col_i
                 break
                 
         if day_idx != -1:
-            # Look up to find the court header name above this table
-            parent_form = table.find_parent('form')
-            heading = parent_form.find(['h2', 'h3', 'div', 'span'], class_='bs_head') if parent_form else None
-            court_name = heading.text.strip() if heading else "Badmintoncourt"
+            court_name = get_clean_court_name(table, idx)
 
             for row in table.find_all('tr')[1:]:
                 cells = row.find_all(['th', 'td'])
@@ -80,34 +92,37 @@ def main():
                 
                 if time_slot in row_time and len(cells) > day_idx:
                     target_cell = cells[day_idx]
+                    cell_text = target_cell.text.strip()
                     
-                    # 1. Collect all plain text inside the cell
-                    cell_text = target_cell.text.strip().lower()
-                    
-                    # 2. Extract values from any <input> elements (e.g. <input type="submit" value="buchen">)
+                    # Check for active 'buchen' inputs
                     inputs = target_cell.find_all('input')
                     input_values = [inp.get('value', '').lower() for inp in inputs if inp.get('value')]
+                    has_buchen_btn = any('buchen' in val for val in input_values) or 'buchen' in cell_text.lower()
                     
-                    # Check for "buchen" in text or input attributes
-                    has_buchen_btn = any('buchen' in val for val in input_values) or 'buchen' in cell_text
-                    is_open_status = 'keine buchung' not in cell_text and cell_text != ''
+                    # 1. Slot is available right now
+                    if has_buchen_btn:
+                        available_now.append(f"• **{court_name}**: Available Now! (buchen)")
                     
-                    if has_buchen_btn or is_open_status:
-                        status_display = "buchen" if has_buchen_btn else target_cell.text.strip()
-                        available_courts.append(f"• {court_name} ({status_display})")
+                    # 2. Slot opens in advance (e.g., "ab 09.09., 18:00")
+                    elif 'ab ' in cell_text.lower() and 'keine buchung' not in cell_text.lower():
+                        opening_soon.append(f"• **{court_name}**: Opens at `{cell_text}`")
 
-    if available_courts:
-        courts_list = "\n".join(available_courts)
-        message = (
-            f"🏸 *Badminton Court Alert!*\n\n"
-            f"Slots available for **{CONFIG['TARGET_WEEKDAY']} at {time_slot}**:\n"
-            f"{courts_list}\n\n"
-            f"Book immediately here:\n{URL}"
-        )
-        send_telegram_message(message)
-        print(f"Slots found for {CONFIG['TARGET_WEEKDAY']} at {time_slot}! Telegram notification sent.")
+    # Send consolidated notification if any slots are available or opening
+    if available_now or opening_soon:
+        msg_parts = [f"🏸 *Badminton Court Alert!*\n\nTarget: **{CONFIG['TARGET_WEEKDAY']} at {time_slot}**\n"]
+        
+        if available_now:
+            msg_parts.append("*Ready to Book Now:*\n" + "\n".join(available_now) + "\n")
+            
+        if opening_soon:
+            msg_parts.append("*Upcoming Booking Releases (24h Window):*\n" + "\n".join(opening_soon) + "\n")
+            
+        msg_parts.append(f"Book immediately here:\n{URL}")
+        
+        send_telegram_message("\n".join(msg_parts))
+        print("Alert sent to Telegram!")
     else:
-        print(f"No slots available for {CONFIG['TARGET_WEEKDAY']} at {time_slot} across any court.")
+        print(f"No active or upcoming slots found for {CONFIG['TARGET_WEEKDAY']} at {time_slot}.")
 
 if __name__ == "__main__":
     main()
