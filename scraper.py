@@ -50,21 +50,15 @@ def main():
     soup = BeautifulSoup(response.text, 'html.parser')
     available_courts = []
     
-    for bs_form in soup.find_all('form', class_='bs_form_angebot'):
-        heading = bs_form.find(['h2', 'h3', 'div', 'span'], class_='bs_head')
-        court_name = heading.text.strip() if heading else "Badmintoncourt"
-        
-        table = bs_form.find('table')
-        if not table:
-            continue
-            
+    # Iterate through all booking tables
+    for table in soup.find_all('table'):
         first_row = table.find('tr')
         if not first_row:
             continue
             
         columns = [col.text.strip().lower() for col in first_row.find_all(['th', 'td'])]
         
-        # Locate column matching the target weekday (e.g., 'montag')
+        # Locate the column matching the target weekday
         day_idx = -1
         for idx, col in enumerate(columns):
             if target_day in col:
@@ -72,6 +66,11 @@ def main():
                 break
                 
         if day_idx != -1:
+            # Look up to find the court header name above this table
+            parent_form = table.find_parent('form')
+            heading = parent_form.find(['h2', 'h3', 'div', 'span'], class_='bs_head') if parent_form else None
+            court_name = heading.text.strip() if heading else "Badmintoncourt"
+
             for row in table.find_all('tr')[1:]:
                 cells = row.find_all(['th', 'td'])
                 if not cells:
@@ -82,19 +81,19 @@ def main():
                 if time_slot in row_time and len(cells) > day_idx:
                     target_cell = cells[day_idx]
                     
-                    # Check for a 'buchen' input button inside the cell
-                    buchen_input = target_cell.find('input', getattr={'value': lambda v: v and 'buchen' in v.lower()}) if hasattr(target_cell, 'find') else None
-                    if not buchen_input:
-                        buchen_input = target_cell.find('input', value=lambda v: v and 'buchen' in v.lower())
+                    # 1. Collect all plain text inside the cell
+                    cell_text = target_cell.text.strip().lower()
                     
-                    cell_text = target_cell.text.strip()
+                    # 2. Extract values from any <input> elements (e.g. <input type="submit" value="buchen">)
+                    inputs = target_cell.find_all('input')
+                    input_values = [inp.get('value', '').lower() for inp in inputs if inp.get('value')]
                     
-                    # Slot is available if it contains a 'buchen' button OR text other than 'keine Buchung'
-                    is_buchen_button = buchen_input is not None or 'buchen' in cell_text.lower()
-                    is_open_status = 'keine buchung' not in cell_text.lower() and cell_text != ''
+                    # Check for "buchen" in text or input attributes
+                    has_buchen_btn = any('buchen' in val for val in input_values) or 'buchen' in cell_text
+                    is_open_status = 'keine buchung' not in cell_text and cell_text != ''
                     
-                    if is_buchen_button or is_open_status:
-                        status_display = "buchen" if is_buchen_button else cell_text
+                    if has_buchen_btn or is_open_status:
+                        status_display = "buchen" if has_buchen_btn else target_cell.text.strip()
                         available_courts.append(f"• {court_name} ({status_display})")
 
     if available_courts:
