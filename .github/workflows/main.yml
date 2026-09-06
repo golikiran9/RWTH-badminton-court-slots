@@ -27,4 +27,5 @@ jobs:
           CHAT_ID: ${{ secrets.CHAT_ID }}
           TARGET_WEEKDAY: ${{ vars.TARGET_WEEKDAY }}
           TARGET_TIME: ${{ vars.TARGET_TIME }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
         run: python scraper.py
