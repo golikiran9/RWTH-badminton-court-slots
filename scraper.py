@@ -14,7 +14,7 @@ CONFIG = {
     
     # Target time slot format (e.g., '18:00', '19:30', '09:00')
     #'TARGET_TIME': '18:00',
-    'TARGET_TIME': '07:00',
+    'TARGET_TIME': '07:30',
     
     # Set to True if you want a heartbeat ping every time GitHub Actions runs
     'DEBUG_NOTIFY': False 
