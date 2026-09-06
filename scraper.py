@@ -4,15 +4,13 @@ import requests
 from bs4 import BeautifulSoup
 
 # ==========================================
-# CONFIGURATION: Update target schedule here
+# CONFIGURATION: Read target schedule from env
 # ==========================================
 CONFIG = {
     # Simple day name: 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'
-    # 'TARGET_WEEKDAY': 'Mittwoch',
     'TARGET_WEEKDAY': os.environ.get('TARGET_WEEKDAY', 'Mittwoch'),
     
     # Target time slot format (e.g., '18:00', '19:30', '07:30')
-    #'TARGET_TIME': '18:00',
     'TARGET_TIME': os.environ.get('TARGET_TIME', '18:00'),
     
     # Set to True if you want a heartbeat ping every time GitHub Actions runs
@@ -21,9 +19,14 @@ CONFIG = {
 
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 CHAT_ID = os.environ.get('CHAT_ID')
+EVENT_NAME = os.environ.get('GITHUB_EVENT_NAME', '')  # Set by GitHub Actions workflow
 URL = "https://buchung.hsz.rwth-aachen.de/angebote/Sommersemester/_Badmintoncourt_Einzelterminbuchung.html"
 
 def send_telegram_message(message):
+    if not TELEGRAM_TOKEN or not CHAT_ID:
+        print("Telegram token or Chat ID missing. Skipping message dispatch.")
+        return
+    
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {
         "chat_id": CHAT_ID,
@@ -34,7 +37,6 @@ def send_telegram_message(message):
 
 def get_clean_court_name(table_elem, index):
     """Extracts exact court name (e.g. 'Badmintoncourt 1') avoiding duplicated generic titles."""
-    # Look backwards for the nearest preceding element containing court details
     prev_node = table_elem.find_previous(['h2', 'h3', 'div', 'b'])
     while prev_node:
         text = prev_node.text.strip()
@@ -60,7 +62,10 @@ def main():
         response = requests.get(URL, headers=headers)
         response.raise_for_status()
     except Exception as e:
-        print(f"Failed to fetch website: {e}")
+        error_msg = f"⚠️ Failed to fetch RWTH website: {e}"
+        print(error_msg)
+        if EVENT_NAME == 'workflow_dispatch':
+            send_telegram_message(error_msg)
         return
         
     soup = BeautifulSoup(response.text, 'html.parser')
@@ -109,7 +114,7 @@ def main():
                     elif 'ab ' in cell_text.lower() and 'keine buchung' not in cell_text.lower():
                         opening_soon.append(f"• **{court_name}**: Opens at `{cell_text}`")
 
-    # Send consolidated notification if any slots are available or opening
+    # --- Notification Logic ---
     if available_now or opening_soon:
         msg_parts = [f"🏸 *Badminton Court Alert!*\n\nTarget: **{CONFIG['TARGET_WEEKDAY']} at {time_slot}**\n"]
         
@@ -123,6 +128,13 @@ def main():
         
         send_telegram_message("\n".join(msg_parts))
         print("Alert sent to Telegram!")
+
+    # If no slots found AND execution was manually triggered via /check
+    elif EVENT_NAME == 'workflow_dispatch':
+        no_slots_msg = f"❌ No slots available for **{CONFIG['TARGET_WEEKDAY']} at {time_slot}**."
+        send_telegram_message(no_slots_msg)
+        print(f"No slots available. Sent manual trigger response to Telegram.")
+        
     else:
         print(f"No active or upcoming slots found for {CONFIG['TARGET_WEEKDAY']} at {time_slot}.")
 
