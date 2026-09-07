@@ -7,19 +7,14 @@ from bs4 import BeautifulSoup
 # CONFIGURATION: Read target schedule from env
 # ==========================================
 CONFIG = {
-    # Simple day name: 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'
     'TARGET_WEEKDAY': os.environ.get('TARGET_WEEKDAY', 'Mittwoch'),
-    
-    # Target time slot format (e.g., '18:00', '19:30', '07:30')
     'TARGET_TIME': os.environ.get('TARGET_TIME', '18:00'),
-    
-    # Set to True if you want a heartbeat ping every time GitHub Actions runs
     'DEBUG_NOTIFY': False 
 }
 
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 CHAT_ID = os.environ.get('CHAT_ID')
-EVENT_NAME = os.environ.get('GITHUB_EVENT_NAME', '')  # Set by GitHub Actions workflow
+IS_MANUAL = os.environ.get('IS_MANUAL', 'false').lower() == 'true'
 URL = "https://buchung.hsz.rwth-aachen.de/angebote/Sommersemester/_Badmintoncourt_Einzelterminbuchung.html"
 
 def send_telegram_message(message):
@@ -64,7 +59,7 @@ def main():
     except Exception as e:
         error_msg = f"⚠️ Failed to fetch RWTH website: {e}"
         print(error_msg)
-        if EVENT_NAME == 'workflow_dispatch':
+        if IS_MANUAL:
             send_telegram_message(error_msg)
         return
         
@@ -115,7 +110,6 @@ def main():
     if available_now:
         msg_parts = [f"🏸 *Badminton Court Alert!*\n\nTarget: **{CONFIG['TARGET_WEEKDAY']} at {time_slot}**\n"]
         msg_parts.append("*Ready to Book Now:*\n" + "\n".join(available_now) + "\n")
-        #msg_parts.append(f"Book immediately here:\n{URL}")
         msg_parts.append(f"[👉 Click here to book court]({URL})") 
         
         send_telegram_message("\n".join(msg_parts))
@@ -124,7 +118,7 @@ def main():
     # 2. NO IMMEDIATE SLOTS AVAILABLE
     else:
         # Only notify if triggered manually via Telegram (/check command)
-        if EVENT_NAME == 'workflow_dispatch':
+        if IS_MANUAL:
             no_slots_msg = f"❌ No slots available for **{CONFIG['TARGET_WEEKDAY']} at {time_slot}**."
             send_telegram_message(no_slots_msg)
             print("No slots available. Sent response for manual /check command.")
