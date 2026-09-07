@@ -70,7 +70,6 @@ def main():
         
     soup = BeautifulSoup(response.text, 'html.parser')
     available_now = []
-    opening_soon = []
     
     tables = soup.find_all('table')
     for idx, table in enumerate(tables, start=1):
@@ -106,37 +105,31 @@ def main():
                     input_values = [inp.get('value', '').lower() for inp in inputs if inp.get('value')]
                     has_buchen_btn = any('buchen' in val for val in input_values) or 'buchen' in cell_text.lower()
                     
-                    # 1. Slot is available right now
+                    # Check for active bookable slot
                     if has_buchen_btn:
                         available_now.append(f"• **{court_name}**: Available Now! (buchen)")
-                    
-                    # 2. Slot opens in advance (e.g., "ab 09.09., 18:00")
-                    elif 'ab ' in cell_text.lower() and 'keine buchung' not in cell_text.lower():
-                        opening_soon.append(f"• **{court_name}**: Opens at `{cell_text}`")
 
     # --- Notification Logic ---
-    if available_now or opening_soon:
+    
+    # 1. IMMEDIATE BOOKABLE SLOT FOUND: Send Alert always (Cron + Manual)
+    if available_now:
         msg_parts = [f"🏸 *Badminton Court Alert!*\n\nTarget: **{CONFIG['TARGET_WEEKDAY']} at {time_slot}**\n"]
-        
-        if available_now:
-            msg_parts.append("*Ready to Book Now:*\n" + "\n".join(available_now) + "\n")
-            
-        if opening_soon:
-            msg_parts.append("*Upcoming Booking Releases (24h Window):*\n" + "\n".join(opening_soon) + "\n")
-            
+        msg_parts.append("*Ready to Book Now:*\n" + "\n".join(available_now) + "\n")
         msg_parts.append(f"Book immediately here:\n{URL}")
         
         send_telegram_message("\n".join(msg_parts))
-        print("Alert sent to Telegram!")
+        print("Bookable slot alert sent to Telegram!")
 
-    # If no slots found AND execution was manually triggered via /check
-    elif EVENT_NAME == 'workflow_dispatch':
-        no_slots_msg = f"❌ No slots available for **{CONFIG['TARGET_WEEKDAY']} at {time_slot}**."
-        send_telegram_message(no_slots_msg)
-        print(f"No slots available. Sent manual trigger response to Telegram.")
-        
+    # 2. NO IMMEDIATE SLOTS AVAILABLE
     else:
-        print(f"No active or upcoming slots found for {CONFIG['TARGET_WEEKDAY']} at {time_slot}.")
+        # Only notify if triggered manually via Telegram (/check command)
+        if EVENT_NAME == 'workflow_dispatch':
+            no_slots_msg = f"❌ No slots available for **{CONFIG['TARGET_WEEKDAY']} at {time_slot}**."
+            send_telegram_message(no_slots_msg)
+            print("No slots available. Sent response for manual /check command.")
+        else:
+            # Scheduled cron run with no slots found: stay silent
+            print(f"Scheduled Run: No open slots found for {CONFIG['TARGET_WEEKDAY']} at {time_slot}. Message suppressed.")
 
 if __name__ == "__main__":
     main()
