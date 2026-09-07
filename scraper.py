@@ -115,7 +115,8 @@ def main():
     if available_now:
         msg_parts = [f"🏸 *Badminton Court Alert!*\n\nTarget: **{CONFIG['TARGET_WEEKDAY']} at {time_slot}**\n"]
         msg_parts.append("*Ready to Book Now:*\n" + "\n".join(available_now) + "\n")
-        msg_parts.append(f"Book immediately here:\n{URL}")
+        #msg_parts.append(f"Book immediately here:\n{URL}")
+        msg_parts.append(f"[👉 Click here to book court]({URL})") 
         
         send_telegram_message("\n".join(msg_parts))
         print("Bookable slot alert sent to Telegram!")
