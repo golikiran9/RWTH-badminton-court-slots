@@ -2,14 +2,14 @@ name: Badminton Slot Tracker
 
 on:
   schedule:
-    - cron: '*/15 * * * *'  # Runs every 15 minutes
+    #- cron: '*/15 * * * *'  # Runs every 15 minutes
   workflow_dispatch:         # Allows triggering on-demand via API or UI
 
 jobs:
   check-slots:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
