@@ -3,29 +3,29 @@ name: Badminton Slot Tracker
 on:
   #schedule:
     #- cron: '*/15 * * * *'  # Runs every 15 minutes
-  workflow_dispatch:         # Allows triggering on-demand via API or UI
+  workflow_dispatch:
+    inputs:
+      is_manual:
+        description: 'Triggered manually via Telegram'
+        required: false
+        default: 'false'
 
 jobs:
-  check-slots:
+  scrape:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v3
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: '3.x'
-
       - name: Install dependencies
-        run: |
-          pip install requests beautifulsoup4
-
+        run: pip install requests beautifulsoup4
       - name: Run Scraper
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
           TARGET_WEEKDAY: ${{ vars.TARGET_WEEKDAY }}
           TARGET_TIME: ${{ vars.TARGET_TIME }}
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          IS_MANUAL: ${{ inputs.is_manual }}
         run: python scraper.py
