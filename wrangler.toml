@@ -1,0 +1,6 @@
+name = "rwth-bot-webhook"
+main = "index.js" # Replace with your entry script name if different (e.g., worker.js)
+compatibility_date = "2024-01-01"
+
+[triggers]
+crons = ["*/15 * * * *"]
